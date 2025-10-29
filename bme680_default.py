@@ -4,7 +4,7 @@ import time
 
 import bme680
 
-print("""read-all.py - Displays temperature, pressure, humidity, and gas.
+print("""bme680_default.py - Displays temperature, pressure, humidity, and gas.
 
 Press Ctrl+C to exit!
 

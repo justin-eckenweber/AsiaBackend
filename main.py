@@ -1,9 +1,44 @@
+import sys
+
 import bme680
 import uvicorn
 from fastapi import FastAPI
 import RPi.GPIO as GPIO
 import time
 import threading
+import pymysql
+from fastapi.middleware.cors import CORSMiddleware
+
+
+db_user = 'sensor_user'
+db_password = 'dein_passwort'
+
+try:
+    connection = pymysql.connect(
+        host='localhost',
+        port=3306,
+        user=db_user,
+        password=db_password,
+        database='sensor_db',
+    )
+
+    cursor = connection.cursor()
+    cursor.execute('''
+                   CREATE TABLE IF NOT EXISTS sensor_data
+                   (
+                       id          INT     NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                       timestamp   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                       motion      BOOLEAN NOT NULL,
+                       temperature FLOAT   NOT NULL,
+                       humidity    FLOAT   NOT NULL,
+                       pressure    FLOAT   NOT NULL,
+                       gas_resistance  FLOAT   NOT NULL
+                   )
+                   ''')
+
+except pymysql.Error as error:
+    print(error)
+    sys.exit(1)
 
 sensor_pin = 22
 GPIO.setmode(GPIO.BCM)
@@ -62,7 +97,19 @@ def sensor_loop():
 
         time.sleep(1)
 
+def database_loop():
+    global temperature, humidity, pressure, gas_resistance, motion_detected
 
+    time.sleep(10)
+
+    while True:
+        cursor.execute('INSERT INTO sensor_data(motion, temperature, humidity, pressure, gas_resistance) VALUES (%s, %s, %s, %s, %s) ', (
+            motion_detected, temperature, humidity, pressure, gas_resistance
+        ))
+
+        connection.commit()
+
+        time.sleep(300)
 app = FastAPI()
 
 @app.on_event("startup")
@@ -72,9 +119,18 @@ def startup_event():
 
     proxmity_thread = threading.Thread(target=proxmity_loop, daemon=True)
     proxmity_thread.start()
+
+    database_thread = threading.Thread(target=database_loop, daemon=True)
+    database_thread.start()
     print("Sensor thread started")
 
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 @app.get("/")
 async def root():
     return {"message": "Hello World"}
@@ -89,6 +145,11 @@ async def sensor():
         "gas_resistance": gas_resistance
     }
 
+@app.get("/get/all")
+async def get_all():
+    cursor.execute("SELECT * FROM sensor_data")
+    sensor_data = cursor.fetchall()
+    return {"sensor_data": sensor_data}
 
 
 if __name__ == "__main__":
