@@ -149,7 +149,21 @@ async def sensor():
 async def get_all():
     cursor.execute("SELECT * FROM sensor_data")
     sensor_data = cursor.fetchall()
-    return {"sensor_data": sensor_data}
+
+    better_data = []
+
+    for row in sensor_data:
+        better_data.append({
+            "id": row[0],
+            "timestamp": row[1],
+            "motion": row[2],
+            "temperature": row[3],
+            "humidity": row[4],
+            "pressure": row[5],
+            "gas_resistance": row[6]
+        })
+
+    return better_data
 
 
 if __name__ == "__main__":
