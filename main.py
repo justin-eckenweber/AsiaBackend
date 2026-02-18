@@ -97,6 +97,33 @@ def sensor_loop():
 
         time.sleep(1)
 
+def lineare_regression(x, y, neue_x=None):
+    n = len(x)
+
+    x_mean = sum(x) / n
+    y_mean = sum(y) / n
+
+    sum_xy_abweichung = 0
+    sum_x_quadrat_abweichung = 0
+
+    for i in range(n):
+        x_abweichung = x[i] - x_mean
+        y_abweichung = y[i] - y_mean
+
+        sum_xy_abweichung += x_abweichung * y_abweichung
+        sum_x_quadrat_abweichung += x_abweichung * x_abweichung
+
+    m = sum_xy_abweichung / sum_x_quadrat_abweichung if sum_x_quadrat_abweichung != 0 else 0
+    b = y_mean - m * x_mean
+
+
+    vorhersagen = None
+    if neue_x:
+        vorhersagen = [round(m * xi + b, 4) for xi in neue_x]
+
+    return  vorhersagen
+
+
 def database_loop():
     global temperature, humidity, pressure, gas_resistance, motion_detected
 
@@ -164,6 +191,13 @@ async def get_all():
         })
 
     return better_data
+
+@app.get("/get/regression")
+async def getRegression():
+    countGuest = [13, 11, 16, 21, 14, 52, 27, 18]
+    temps = [19.1, 18.0, 17.0, 16.1, 15.1, 23.1, 21.1, 19.9]
+
+    lineare_regression(countGuest, temps, [0, 60, 120])
 
 
 if __name__ == "__main__":
