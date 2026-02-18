@@ -197,7 +197,7 @@ async def getRegression():
     countGuest = [13, 11, 16, 21, 14, 52, 27, 18]
     temps = [19.1, 18.0, 17.0, 16.1, 15.1, 23.1, 21.1, 19.9]
 
-    lineare_regression(countGuest, temps, [0, 60, 120])
+    return lineare_regression(countGuest, temps, [0, 60, 120])
 
 
 if __name__ == "__main__":
