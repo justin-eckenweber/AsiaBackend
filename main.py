@@ -13,7 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 db_user = 'sensor_user'
 db_password = 'dein_passwort'
 
+# --- Database connection setup ---
 try:
+    # Connect to local MySQL database
     connection = pymysql.connect(
         host='localhost',
         port=3306,
@@ -23,6 +25,7 @@ try:
     )
 
     cursor = connection.cursor()
+    # Create table if it doesn't already exist
     cursor.execute('''
                    CREATE TABLE IF NOT EXISTS sensor_data
                    (
@@ -40,18 +43,24 @@ except pymysql.Error as error:
     print(error)
     sys.exit(1)
 
+# --- GPIO setup for motion sensor (RCWL-0516) ---
 sensor_pin = 22
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(sensor_pin, GPIO.IN)
 
+# --- Global shared state variables ---
 state = 0
 motion_detected = False  # Shared state
-
 temperature = 0
 humidity = 0
 pressure = 0
 gas_resistance = 0
 
+# -------------------------------------------------------------
+#  @function proxmity_loop
+#  @description Monitors the motion sensor continuously and updates the shared motion state.
+#  @returns None
+# -------------------------------------------------------------
 def proxmity_loop():
     global state, motion_detected
     try:
@@ -74,6 +83,12 @@ def proxmity_loop():
         GPIO.cleanup()
 
 
+# -------------------------------------------------------------
+#  @function sensor_loop
+#  @description Reads data from the BME680 sensor (temperature, humidity, pressure, gas resistance)
+#               and updates global variables in regular intervals.
+#  @returns None
+# -------------------------------------------------------------
 def sensor_loop():
     global temperature, humidity, pressure, gas_resistance
     bme680sensor = bme680.BME680(bme680.I2C_ADDR_SECONDARY)
@@ -97,6 +112,15 @@ def sensor_loop():
 
         time.sleep(1)
 
+
+# -------------------------------------------------------------
+#  @function lineare_regression
+#  @description Performs a simple linear regression between x and y values.
+#  @param {list[float]} x - The independent variable values.
+#  @param {list[float]} y - The dependent variable values.
+#  @param {list[float]} [neue_x] - New x-values for prediction (optional).
+#  @returns {list[float]|None} Returns the predicted y-values or None.
+# -------------------------------------------------------------
 def lineare_regression(x, y, neue_x=None):
     n = len(x)
 
@@ -124,6 +148,11 @@ def lineare_regression(x, y, neue_x=None):
     return  vorhersagen
 
 
+# -------------------------------------------------------------
+#  @function database_loop
+#  @description Periodically stores the latest sensor readings into the MySQL database.
+#  @returns None
+# -------------------------------------------------------------
 def database_loop():
     global temperature, humidity, pressure, gas_resistance, motion_detected
 
@@ -137,6 +166,12 @@ def database_loop():
         connection.commit()
 
         time.sleep(300)
+
+# -------------------------------------------------------------
+#  @function startup_event
+#  @description Initializes background threads for the sensor loops on application startup.
+#  @returns None
+# -------------------------------------------------------------
 app = FastAPI()
 
 @app.on_event("startup")
@@ -151,6 +186,7 @@ def startup_event():
     database_thread.start()
     print("Sensor thread started")
 
+# --- CORS configuration (allows cross-origin requests) ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -158,10 +194,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# -------------------------------------------------------------
+#  @endpoint GET /
+#  @description Basic test endpoint for server health check.
+#  @returns {object} Returns a simple hello message.
+# -------------------------------------------------------------
 @app.get("/")
 async def root():
     return {"message": "Hello World"}
 
+
+# -------------------------------------------------------------
+#  @endpoint GET /sensor
+#  @description Returns the latest live sensor readings from global variables.
+#  @returns {object} JSON object containing motion, temperature, humidity, pressure, and gas resistance.
+# -------------------------------------------------------------
 @app.get("/sensor")
 async def sensor():
     return {
@@ -172,6 +220,12 @@ async def sensor():
         "gas_resistance": gas_resistance
     }
 
+
+# -------------------------------------------------------------
+#  @endpoint GET /get/all
+#  @description Retrieves all stored sensor data from the database.
+#  @returns {list[object]} List of all sensor data records.
+# -------------------------------------------------------------
 @app.get("/get/all")
 async def get_all():
     cursor.execute("SELECT * FROM sensor_data")
@@ -192,6 +246,12 @@ async def get_all():
 
     return better_data
 
+
+# -------------------------------------------------------------
+#  @endpoint GET /get/regression
+#  @description Performs linear regression on predefined sample data (demo endpoint).
+#  @returns {list[float]} Predicted y-values for the sample regression.
+# -------------------------------------------------------------
 @app.get("/get/regression")
 async def getRegression():
     countGuest = [13, 11, 16, 21, 14, 52, 27, 18]
@@ -200,5 +260,9 @@ async def getRegression():
     return lineare_regression(countGuest, temps, [0, 60, 120])
 
 
+# -------------------------------------------------------------
+#  @entrypoint
+#  @description Starts the FastAPI app server using Uvicorn.
+# -------------------------------------------------------------
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
